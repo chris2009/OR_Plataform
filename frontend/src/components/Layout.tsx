@@ -10,7 +10,6 @@ import {
   Sun,
   Moon,
   Menu,
-  X,
   Shield,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
@@ -20,7 +19,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { to: "/live", icon: Play, label: "En Vivo" },
-  { to: "/cameras", icon: Camera, label: "Cámaras" },
+  { to: "/cameras", icon: Camera, label: "Fuentes", title: "Fuentes: Cámara IP, Imagen o Video" },
   { to: "/events", icon: Bell, label: "Eventos" },
 ];
 const adminItems = [
@@ -52,19 +51,32 @@ export default function Layout() {
         style={{ background: "var(--surface)" }}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-4 border-b border-white/5">
-          <Shield className="text-accent shrink-0" size={22} />
+        <div className="flex items-center justify-between gap-2 px-4 py-4 border-b border-white/5">
           {!collapsed && (
-            <span className="font-semibold text-sm tracking-wide">YOLO Surveillance</span>
+            <div className="flex items-center gap-3 min-w-0">
+              <Shield className="text-accent shrink-0" size={22} />
+              <span className="font-semibold text-sm tracking-wide truncate">YOLO Surveillance</span>
+            </div>
           )}
+          <button
+            onClick={() => setCollapsed((c) => !c)}
+            className={cn(
+              "p-1.5 shrink-0 text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors",
+              collapsed && "mx-auto"
+            )}
+            title={collapsed ? "Expandir menú" : "Colapsar menú"}
+          >
+            <Menu size={20} />
+          </button>
         </div>
 
         {/* Nav links */}
         <nav className="flex-1 py-4 space-y-1 px-2">
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {navItems.map(({ to, icon: Icon, label, title }) => (
             <NavLink
               key={to}
               to={to}
+              title={title}
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
@@ -106,14 +118,6 @@ export default function Layout() {
             </>
           )}
         </nav>
-
-        {/* Collapse button */}
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          className="p-3 text-gray-500 hover:text-white border-t border-white/5 transition-colors"
-        >
-          {collapsed ? <Menu size={18} /> : <X size={18} />}
-        </button>
       </aside>
 
       {/* Main */}
