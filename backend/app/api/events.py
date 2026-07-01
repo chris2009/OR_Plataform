@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -11,7 +11,7 @@ from app.api.deps import get_current_user, require_admin
 from app.db.session import get_db
 from app.models.event import Event
 from app.models.user import User, UserRole
-from app.schemas.event import EventResponse, EventStats
+from app.schemas.event import EventResponse, EventStats, GroupedCount
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -58,6 +58,7 @@ async def event_stats(
 ):
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=6)  # últimos 7 días, incluido hoy
 
     total_today = (
         await db.execute(
@@ -65,9 +66,13 @@ async def event_stats(
         )
     ).scalar_one()
 
+    # "Hoy", consistente con total_today (antes era todo el histórico, lo
+    # cual hacía que "Top clase" nunca coincidiera con lo que se veía en
+    # la tabla filtrada por el día actual).
     by_class_rows = (
         await db.execute(
             select(Event.detected_class, func.count(Event.id).label("cnt"))
+            .where(Event.timestamp >= today_start)
             .group_by(Event.detected_class)
             .order_by(func.count(Event.id).desc())
         )
@@ -77,6 +82,7 @@ async def event_stats(
     by_camera_rows = (
         await db.execute(
             select(Event.camera_name, func.count(Event.id).label("cnt"))
+            .where(Event.timestamp >= today_start)
             .group_by(Event.camera_name)
             .order_by(func.count(Event.id).desc())
         )
@@ -97,11 +103,61 @@ async def event_stats(
     ).all()
     by_hour = [{"hour": int(r.hour), "count": r.cnt} for r in by_hour_rows]
 
+    # Últimos 7 días × clase (para el gráfico agrupado por día)
+    day_expr = func.to_char(Event.timestamp, "YYYY-MM-DD").label("day")
+    day_class_rows = (
+        await db.execute(
+            select(day_expr, Event.detected_class, func.count(Event.id).label("cnt"))
+            .where(Event.timestamp >= week_start)
+            .group_by(day_expr, Event.detected_class)
+            .order_by(day_expr)
+        )
+    ).all()
+    day_map: dict[str, dict[str, int]] = {}
+    for r in day_class_rows:
+        day_map.setdefault(r.day, {})[r.detected_class] = r.cnt
+    by_day = [
+        GroupedCount(group=d, counts=day_map.get(d, {}))
+        for d in (
+            (week_start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)
+        )
+    ]
+
+    # Últimos 7 días × cámara × clase (para el gráfico agrupado por fuente)
+    source_rows = (
+        await db.execute(
+            select(Event.camera_name, Event.detected_class, func.count(Event.id).label("cnt"))
+            .where(Event.timestamp >= week_start)
+            .group_by(Event.camera_name, Event.detected_class)
+            .order_by(Event.camera_name)
+        )
+    ).all()
+    source_map: dict[str, dict[str, int]] = {}
+    for r in source_rows:
+        source_map.setdefault(r.camera_name, {})[r.detected_class] = r.cnt
+    by_source = [GroupedCount(group=cam, counts=counts) for cam, counts in source_map.items()]
+
+    # Valores distintos de todo el histórico, para poblar los filtros del datatable
+    all_classes = [
+        r[0] for r in (await db.execute(
+            select(Event.detected_class).distinct().order_by(Event.detected_class)
+        )).all()
+    ]
+    all_cameras = [
+        r[0] for r in (await db.execute(
+            select(Event.camera_name).distinct().order_by(Event.camera_name)
+        )).all()
+    ]
+
     return EventStats(
         total_today=total_today,
         by_class=by_class,
         by_camera=by_camera,
         by_hour=by_hour,
+        by_day=by_day,
+        by_source=by_source,
+        all_classes=all_classes,
+        all_cameras=all_cameras,
     )
 
 

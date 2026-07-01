@@ -1,31 +1,77 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format } from "date-fns";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { CheckCircle, Trash2 } from "lucide-react";
-import { eventsApi, type Event, type EventStats } from "@/api";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { CheckCircle, Trash2, Layers, Tag, Camera as CameraIcon, Clock, type LucideIcon } from "lucide-react";
+import { eventsApi, camerasApi, type Event, type EventStats, type Camera, type GroupedCount } from "@/api";
 import { useAuthStore } from "@/store/authStore";
-import { cn } from "@/lib/utils";
+import { cn, colorForClass } from "@/lib/utils";
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+const OTHER_COLOR = "#6B7280";
+
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+  color,
+}: {
+  label: string;
+  value: string | number;
+  icon: LucideIcon;
+  color: string;
+}) {
   return (
-    <div className="card-glass p-4">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className="text-2xl font-semibold font-mono">{value}</p>
+    <div className="card-glass p-4 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-0.5" style={{ backgroundColor: color }} />
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-xs text-gray-500">{label}</p>
+        <Icon size={15} style={{ color }} />
+      </div>
+      <p className="text-2xl font-semibold font-mono capitalize truncate" style={{ color }}>
+        {value}
+      </p>
     </div>
   );
+}
+
+function parseDayLocal(dayStr: string): Date {
+  const [y, m, d] = dayStr.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function buildChartData(rows: GroupedCount[], topClasses: string[], groupBy: "day" | "source") {
+  return rows.map((r) => {
+    const entry: Record<string, string | number> = {
+      group: groupBy === "day" ? format(parseDayLocal(r.group), "dd/MM") : r.group,
+    };
+    let otras = 0;
+    for (const [cls, cnt] of Object.entries(r.counts)) {
+      if (topClasses.includes(cls)) entry[cls] = cnt;
+      else otras += cnt;
+    }
+    if (otras > 0) entry.otras = otras;
+    return entry;
+  });
 }
 
 export default function EventsPage() {
   const { user } = useAuthStore();
   const [events, setEvents] = useState<Event[]>([]);
   const [stats, setStats] = useState<EventStats | null>(null);
+  const [cameras, setCameras] = useState<Camera[]>([]);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Event | null>(null);
-  const [filters, setFilters] = useState({ acknowledged: "" as "" | "true" | "false" });
+  const [groupBy, setGroupBy] = useState<"day" | "source">("day");
+  const [filters, setFilters] = useState({
+    acknowledged: "" as "" | "true" | "false",
+    camera_id: "",
+    detected_class: "",
+  });
 
   const load = useCallback(async () => {
     const params: Record<string, unknown> = { page, page_size: 20 };
     if (filters.acknowledged !== "") params.acknowledged = filters.acknowledged === "true";
+    if (filters.camera_id !== "") params.camera_id = Number(filters.camera_id);
+    if (filters.detected_class !== "") params.detected_class = filters.detected_class;
     const [evRes, stRes] = await Promise.all([
       eventsApi.list(params),
       eventsApi.stats(),
@@ -35,6 +81,12 @@ export default function EventsPage() {
   }, [page, filters]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { camerasApi.list().then((r) => setCameras(r.data)); }, []);
+
+  const updateFilter = (patch: Partial<typeof filters>) => {
+    setFilters((f) => ({ ...f, ...patch }));
+    setPage(1);
+  };
 
   const handleAck = async (id: number) => {
     await eventsApi.acknowledge(id);
@@ -48,8 +100,27 @@ export default function EventsPage() {
     if (selected?.id === id) setSelected(null);
   };
 
-  const topClass = stats ? Object.entries(stats.by_class).sort((a, b) => b[1] - a[1])[0]?.[0] : "—";
-  const topCamera = stats ? Object.entries(stats.by_camera).sort((a, b) => b[1] - a[1])[0]?.[0] : "—";
+  const topClass = stats ? Object.entries(stats.by_class).sort((a, b) => b[1] - a[1])[0]?.[0] : undefined;
+  const topCamera = stats ? Object.entries(stats.by_camera).sort((a, b) => b[1] - a[1])[0]?.[0] : undefined;
+
+  const chartRows = groupBy === "day" ? stats?.by_day ?? [] : stats?.by_source ?? [];
+
+  const topClasses = useMemo(() => {
+    const totals: Record<string, number> = {};
+    chartRows.forEach((r) => {
+      Object.entries(r.counts).forEach(([cls, cnt]) => {
+        totals[cls] = (totals[cls] ?? 0) + cnt;
+      });
+    });
+    return Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 7).map(([c]) => c);
+  }, [chartRows]);
+
+  const chartData = useMemo(
+    () => buildChartData(chartRows, topClasses, groupBy),
+    [chartRows, topClasses, groupBy]
+  );
+  const hasOtras = chartData.some((d) => "otras" in d);
+  const seriesKeys = hasOtras ? [...topClasses, "otras"] : topClasses;
 
   return (
     <div className="space-y-6">
@@ -57,41 +128,102 @@ export default function EventsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total hoy" value={stats?.total_today ?? 0} />
-        <StatCard label="Top clase" value={topClass ?? "—"} />
-        <StatCard label="Top cámara" value={topCamera ?? "—"} />
-        <StatCard label="Última hora" value={stats?.by_hour.at(-1)?.count ?? 0} />
+        <StatCard label="Total hoy" value={stats?.total_today ?? 0} icon={Layers} color="#2563EB" />
+        <StatCard
+          label="Top clase (hoy)"
+          value={topClass ?? "—"}
+          icon={Tag}
+          color={topClass ? colorForClass(topClass) : "#6B7280"}
+        />
+        <StatCard label="Top cámara (hoy)" value={topCamera ?? "—"} icon={CameraIcon} color="#F59E0B" />
+        <StatCard label="Última hora" value={stats?.by_hour.at(-1)?.count ?? 0} icon={Clock} color="#10B981" />
       </div>
 
-      {/* Gráfica por hora */}
-      {stats && stats.by_hour.length > 0 && (
-        <div className="card-glass p-4">
-          <p className="text-sm text-gray-400 mb-3">Detecciones por hora (hoy)</p>
-          <ResponsiveContainer width="100%" height={150}>
-            <BarChart data={stats.by_hour}>
-              <XAxis dataKey="hour" tick={{ fill: "#6B7280", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#6B7280", fontSize: 11 }} />
+      {/* Gráfica agrupada por día/fuente, coloreada por clase */}
+      <div className="card-glass p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm text-gray-400">
+            Detecciones {groupBy === "day" ? "por día" : "por fuente"} (últimos 7 días)
+          </p>
+          <div className="flex gap-1 text-xs bg-white/5 rounded-md p-0.5">
+            <button
+              onClick={() => setGroupBy("day")}
+              className={cn(
+                "px-2.5 py-1 rounded transition-colors",
+                groupBy === "day" ? "bg-accent text-white" : "text-gray-400 hover:text-white"
+              )}
+            >
+              Por día
+            </button>
+            <button
+              onClick={() => setGroupBy("source")}
+              className={cn(
+                "px-2.5 py-1 rounded transition-colors",
+                groupBy === "source" ? "bg-accent text-white" : "text-gray-400 hover:text-white"
+              )}
+            >
+              Por fuente
+            </button>
+          </div>
+        </div>
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={chartData}>
+              <XAxis dataKey="group" tick={{ fill: "#6B7280", fontSize: 11 }} />
+              <YAxis tick={{ fill: "#6B7280", fontSize: 11 }} allowDecimals={false} />
               <Tooltip
                 contentStyle={{ background: "#111827", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6 }}
                 labelStyle={{ color: "#9CA3AF" }}
-                itemStyle={{ color: "#2563EB" }}
+                cursor={{ fill: "rgba(255,255,255,0.03)" }}
               />
-              <Bar dataKey="count" fill="#2563EB" radius={[3, 3, 0, 0]} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              {seriesKeys.map((key, i) => (
+                <Bar
+                  key={key}
+                  dataKey={key}
+                  name={key}
+                  stackId="a"
+                  fill={key === "otras" ? OTHER_COLOR : colorForClass(key)}
+                  radius={i === seriesKeys.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
+                />
+              ))}
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      )}
+        ) : (
+          <p className="text-center text-sm text-gray-500 py-16">Sin eventos en los últimos 7 días</p>
+        )}
+      </div>
 
       {/* Filtros */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <select
           value={filters.acknowledged}
-          onChange={(e) => setFilters({ acknowledged: e.target.value as "" | "true" | "false" })}
+          onChange={(e) => updateFilter({ acknowledged: e.target.value as "" | "true" | "false" })}
           className="input-field w-auto text-sm"
         >
           <option value="">Todos los estados</option>
           <option value="false">Pendientes</option>
           <option value="true">Reconocidos</option>
+        </select>
+        <select
+          value={filters.camera_id}
+          onChange={(e) => updateFilter({ camera_id: e.target.value })}
+          className="input-field w-auto text-sm"
+        >
+          <option value="">Todas las fuentes</option>
+          {cameras.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select
+          value={filters.detected_class}
+          onChange={(e) => updateFilter({ detected_class: e.target.value })}
+          className="input-field w-auto text-sm capitalize"
+        >
+          <option value="">Todas las clases</option>
+          {(stats?.all_classes ?? []).map((c) => (
+            <option key={c} value={c} className="capitalize">{c}</option>
+          ))}
         </select>
       </div>
 
@@ -128,7 +260,15 @@ export default function EventsPage() {
                   {format(new Date(ev.timestamp), "dd/MM HH:mm:ss")}
                 </td>
                 <td className="px-4 py-3">{ev.camera_name}</td>
-                <td className="px-4 py-3 font-medium capitalize">{ev.detected_class}</td>
+                <td className="px-4 py-3 font-medium capitalize">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: colorForClass(ev.detected_class) }}
+                    />
+                    {ev.detected_class}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <span className={cn(
                     "px-2 py-0.5 rounded text-xs font-mono",
@@ -211,7 +351,13 @@ export default function EventsPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between">
-              <h2 className="text-lg font-semibold capitalize">{selected.detected_class}</h2>
+              <h2 className="text-lg font-semibold capitalize flex items-center gap-2">
+                <span
+                  className="w-2.5 h-2.5 rounded-full"
+                  style={{ backgroundColor: colorForClass(selected.detected_class) }}
+                />
+                {selected.detected_class}
+              </h2>
               <button onClick={() => setSelected(null)} className="text-gray-500 hover:text-white">✕</button>
             </div>
             <img

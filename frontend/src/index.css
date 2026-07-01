@@ -70,6 +70,13 @@
   .light .input-field {
     @apply bg-white border-gray-200 text-gray-900 placeholder-gray-400;
   }
+
+  /* El popup nativo de <select> no hereda el fondo semitransparente del
+     input, así que sin esto el texto queda claro sobre blanco (ilegible). */
+  select.input-field option {
+    background-color: var(--surface);
+    color: var(--text);
+  }
 }
 
 /* Scrollbar personalizado */

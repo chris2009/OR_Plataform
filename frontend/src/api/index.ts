@@ -61,11 +61,20 @@ export interface Event {
   acknowledged_at: string | null;
 }
 
+export interface GroupedCount {
+  group: string;
+  counts: Record<string, number>;
+}
+
 export interface EventStats {
   total_today: number;
   by_class: Record<string, number>;
   by_camera: Record<string, number>;
   by_hour: { hour: number; count: number }[];
+  by_day: GroupedCount[];
+  by_source: GroupedCount[];
+  all_classes: string[];
+  all_cameras: string[];
 }
 
 export const eventsApi = {

@@ -5,6 +5,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import cv2
@@ -18,6 +19,17 @@ if TYPE_CHECKING:
     from app.models.camera import Camera
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=256)
+def _color_for_class(cls_id: int) -> tuple:
+    """Color BGR determinístico por clase, distribuido en la rueda HSV
+    (multiplicador coprimo con 180 para maximizar la separación entre
+    tonos antes de repetir, incluso con las 80 clases COCO)."""
+    hue = (cls_id * 37) % 180
+    hsv = np.uint8([[[hue, 220, 255]]])
+    bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)[0][0]
+    return int(bgr[0]), int(bgr[1]), int(bgr[2])
 
 RECONNECT_DELAY = 5  # segundos entre intentos de reconexión RTSP
 
@@ -151,11 +163,12 @@ class StreamWorker:
                     "x1": x1, "y1": y1, "x2": x2, "y2": y2,
                 })
 
-                # Dibujar bbox
-                cv2.rectangle(annotated, (x1, y1), (x2, y2), (37, 99, 235), 2)
+                # Dibujar bbox con color determinístico por clase
+                color = _color_for_class(cls_id)
+                cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
                 label = f"{cls_name} {conf:.0%}"
                 cv2.putText(annotated, label, (x1, y1 - 8),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (37, 99, 235), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
         # Filtrar por ROI
         if camera.roi:

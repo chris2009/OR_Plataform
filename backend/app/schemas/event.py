@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -22,8 +22,17 @@ class EventResponse(BaseModel):
         from_attributes = True
 
 
+class GroupedCount(BaseModel):
+    group: str
+    counts: Dict[str, int]
+
+
 class EventStats(BaseModel):
     total_today: int
-    by_class: dict
-    by_camera: dict
-    by_hour: list
+    by_class: dict          # hoy, por clase
+    by_camera: dict          # hoy, por cámara
+    by_hour: list             # hoy, por hora
+    by_day: List[GroupedCount]      # últimos 7 días, por clase (para el gráfico)
+    by_source: List[GroupedCount]   # últimos 7 días, por cámara y clase (para el gráfico)
+    all_classes: List[str]     # todas las clases detectadas alguna vez (para filtros)
+    all_cameras: List[str]     # todas las cámaras con eventos alguna vez (para filtros)
