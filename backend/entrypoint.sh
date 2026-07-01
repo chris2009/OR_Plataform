@@ -4,7 +4,7 @@ set -e
 echo "==> Esperando base de datos..."
 python -c "
 import time, psycopg2, os
-url = os.environ.get('DATABASE_URL_SYNC', '')
+url = os.environ.get('DATABASE_URL_SYNC', '').replace('postgresql+psycopg2://', 'postgresql://')
 for i in range(30):
     try:
         conn = psycopg2.connect(url)

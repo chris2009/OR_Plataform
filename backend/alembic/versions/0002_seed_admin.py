@@ -17,11 +17,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # bcrypt hash de "admin123"
-    hashed = "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW"
+    hashed = "$2b$12$TUa2ErnAHTVs.iiM1T1y8.H1asuJTnYhDsgmA5jt0Ab4r5XSZaW2W"
 
     op.execute(f"""
         INSERT INTO users (username, email, hashed_password, full_name, role, is_active, theme_preference)
-        VALUES ('admin', 'admin@yolo.local', '{hashed}', 'Administrator', 'admin', true, 'dark')
+        VALUES ('admin', 'admin@example.com', '{hashed}', 'Administrator', 'admin', true, 'dark')
         ON CONFLICT (username) DO NOTHING
     """)
 

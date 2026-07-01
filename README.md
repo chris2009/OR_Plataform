@@ -6,7 +6,7 @@ Plataforma web de videovigilancia inteligente con detección de objetos en tiemp
 
 - Detección de objetos en tiempo real con YOLOv8 (selección automática del modelo según hardware)
 - Soporte de múltiples fuentes: cámaras IP vía RTSP, videos subidos, imágenes subidas
-- Hasta 2 fuentes activas simultáneas
+- Hasta 2 fuentes RTSP/video activas simultáneas; fuentes tipo imagen sin límite (mosaico dinámico en Live)
 - Zonas ROI (Region of Interest) configurables por cámara
 - Captura y almacenamiento de eventos con snapshots
 - Clasificación configurable: 80 clases COCO con perfiles predefinidos
@@ -128,7 +128,7 @@ Ver `.env.example` para todas las variables disponibles. Las principales:
 
 ### 2. Ver en Tiempo Real
 - Ir a `/live`
-- El grid muestra hasta 2 fuentes activas con bboxes dibujados en vivo
+- El grid muestra todas las fuentes activas en un mosaico dinámico (1x1, 1x2, 2x2, 2x3...) con bboxes dibujados en vivo
 
 ### 3. Revisar Eventos
 - Ir a `/events`
@@ -169,7 +169,7 @@ docker-compose ps
 - El primer arranque puede tardar varios minutos mientras se descarga el modelo YOLO
 - Los snapshots de eventos se guardan en el volumen Docker `snapshots_data`
 - Los modelos YOLO descargados se persisten en el volumen `yolo_models`
-- Máximo 2 fuentes activas simultáneas (limitación de recursos)
+- Máximo 2 fuentes RTSP/video activas simultáneas (limitación de recursos); imágenes sin límite
 - Los streams RTSP reconectan automáticamente cada 5 segundos si se cortan
 
 ## Progreso de Implementación

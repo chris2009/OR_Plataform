@@ -22,6 +22,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { data: tokenData } = await authApi.login(username, password);
+      useAuthStore.setState({ accessToken: tokenData.access_token });
       const { data: meData } = await authApi.me();
       setAuth(tokenData.access_token, meData);
       navigate("/live", { replace: true });

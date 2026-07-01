@@ -23,7 +23,13 @@ MAX_ACTIVE = 2
 
 
 async def _count_active(db: AsyncSession) -> int:
-    result = await db.execute(select(func.count()).where(Camera.is_active == True))
+    """Cuenta solo fuentes RTSP/video activas. Las imágenes se procesan una
+    sola vez (sin loop de inferencia continuo) y no cuentan para el límite."""
+    result = await db.execute(
+        select(func.count()).where(
+            Camera.is_active == True, Camera.source_type != SourceType.image
+        )
+    )
     return result.scalar_one()
 
 
@@ -55,10 +61,14 @@ async def create_camera(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_operator_or_admin),
 ):
-    if payload.is_active and await _count_active(db) >= MAX_ACTIVE:
+    if (
+        payload.is_active
+        and payload.source_type != SourceType.image
+        and await _count_active(db) >= MAX_ACTIVE
+    ):
         raise HTTPException(
             status_code=400,
-            detail=f"Límite de {MAX_ACTIVE} fuentes activas alcanzado",
+            detail=f"Límite de {MAX_ACTIVE} fuentes RTSP/video activas alcanzado",
         )
     cam = Camera(
         **payload.model_dump(exclude={"password"}),
@@ -86,10 +96,11 @@ async def update_camera(
     update_data = payload.model_dump(exclude_none=True)
     password = update_data.pop("password", None)
 
-    # Validar límite si se está activando
-    if update_data.get("is_active") and not was_active:
+    # Validar límite si se está activando (no aplica a fuentes tipo imagen)
+    new_source_type = update_data.get("source_type", cam.source_type)
+    if update_data.get("is_active") and not was_active and new_source_type != SourceType.image:
         if await _count_active(db) >= MAX_ACTIVE:
-            raise HTTPException(status_code=400, detail=f"Límite de {MAX_ACTIVE} fuentes activas alcanzado")
+            raise HTTPException(status_code=400, detail=f"Límite de {MAX_ACTIVE} fuentes RTSP/video activas alcanzado")
 
     for field, value in update_data.items():
         setattr(cam, field, value)

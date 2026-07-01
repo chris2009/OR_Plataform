@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Maximize2, Wifi, WifiOff, Activity } from "lucide-react";
+import { Maximize2, WifiOff, Activity } from "lucide-react";
 import { camerasApi, type Camera } from "@/api";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { cn } from "@/lib/utils";
@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 function CameraCell({ camera, onFullscreen }: { camera: Camera; onFullscreen: () => void }) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [fps, setFps] = useState(0);
-  const [detections, setDetections] = useState<string[]>([]);
   const frameCount = useRef(0);
   const lastFpsTime = useRef(Date.now());
 
@@ -87,7 +86,7 @@ export default function LivePage() {
     });
   }, []);
 
-  const activeCameras = cameras.slice(0, 2);
+  const activeCameras = cameras;
 
   if (activeCameras.length === 0) {
     return (
@@ -101,14 +100,18 @@ export default function LivePage() {
     );
   }
 
+  // Mosaico dinámico: número de columnas ~ raíz cuadrada del total de fuentes
+  // (1 -> 1x1, 2 -> 1x2, 3-4 -> 2x2, 5-6 -> 2x3, 7-9 -> 3x3, ...)
+  const cols = Math.ceil(Math.sqrt(activeCameras.length));
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Vista en Vivo</h1>
-        <span className="text-sm text-gray-500 font-mono">{activeCameras.length}/2 activas</span>
+        <span className="text-sm text-gray-500 font-mono">{activeCameras.length} fuente{activeCameras.length === 1 ? "" : "s"} activa{activeCameras.length === 1 ? "" : "s"}</span>
       </div>
 
-      <div className={cn("grid gap-4", activeCameras.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+      <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {activeCameras.map((cam) => (
           <CameraCell
             key={cam.id}

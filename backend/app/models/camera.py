@@ -40,4 +40,6 @@ class Camera(Base):
     )
 
     owner: Mapped["User"] = relationship("User", back_populates="cameras")
-    events: Mapped[list["Event"]] = relationship("Event", back_populates="camera")
+    events: Mapped[list["Event"]] = relationship(
+        "Event", back_populates="camera", passive_deletes=True
+    )

@@ -51,7 +51,7 @@ Object_Recognition_Plataforma/
   - Solo CPU, RAM ≥ 16 GB → `yolov8s.pt`
   - Solo CPU, RAM < 16 GB → `yolov8n.pt`
 - El modelo arranca en CPU por defecto. Usar `torch.cuda.is_available()` + `psutil.virtual_memory()`.
-- **Máximo 2 cámaras/fuentes activas simultáneas** (validar en backend).
+- **Máximo 2 fuentes RTSP/video activas simultáneas** (validar en backend; loop de inferencia continuo). Las fuentes tipo **imagen** no cuentan para este límite: se procesan una sola vez (sin loop continuo) y pueden estar activas sin restricción.
 - Contraseñas de cámaras cifradas con **Fernet** en BD. Nunca exponerlas en responses API.
 - ROI siempre en **coordenadas relativas (0.0–1.0)**.
 - StreamWorker reconecta cada 5 seg si RTSP se corta. No debe crashear.

@@ -3,7 +3,7 @@ import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/api";
 
 export function useAuthInit() {
-  const { setAuth, logout } = useAuthStore();
+  const { logout } = useAuthStore();
 
   useEffect(() => {
     // Intentar obtener usuario con el refresh token en cookie al cargar la app

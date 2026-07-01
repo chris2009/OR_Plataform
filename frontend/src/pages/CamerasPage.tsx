@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { Plus, Edit2, Trash2, Power, Upload, Check, X as XIcon } from "lucide-react";
 import { camerasApi, type Camera, type SourceType } from "@/api";
-import { COCO_CLASSES, COCO_BY_CATEGORY } from "@/lib/cocoClasses";
+import { COCO_CLASSES } from "@/lib/cocoClasses";
 import { cn } from "@/lib/utils";
 
 const MAX_ACTIVE = 2;
@@ -57,6 +57,11 @@ function ClassMultiSelect({
     onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
   };
 
+  const selectAll = () => {
+    const filteredIds = filtered.map((c) => c.id);
+    onChange(Array.from(new Set([...selected, ...filteredIds])));
+  };
+
   return (
     <div className="space-y-2">
       <input
@@ -67,12 +72,17 @@ function ClassMultiSelect({
         className="input-field text-sm"
       />
       <div className="max-h-48 overflow-y-auto space-y-2 rounded-lg border border-white/10 p-2">
-        {selected.length > 0 && (
-          <div className="flex items-center justify-between text-xs text-gray-400 pb-1 border-b border-white/5">
-            <span>{selected.length} seleccionadas</span>
-            <button onClick={() => onChange([])} className="text-danger hover:text-danger/80">Limpiar</button>
+        <div className="flex items-center justify-between text-xs text-gray-400 pb-1 border-b border-white/5">
+          <span>{selected.length} seleccionadas</span>
+          <div className="flex gap-3">
+            <button type="button" onClick={selectAll} className="text-accent hover:text-accent/80">
+              Seleccionar {search ? "filtradas" : "todas"}
+            </button>
+            {selected.length > 0 && (
+              <button type="button" onClick={() => onChange([])} className="text-danger hover:text-danger/80">Limpiar</button>
+            )}
           </div>
-        )}
+        </div>
         {Object.entries(grouped).map(([cat, classes]) => (
           <div key={cat}>
             <p className="text-xs text-gray-600 uppercase tracking-widest mb-1">{cat}</p>
@@ -123,7 +133,10 @@ export default function CamerasPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
-  const activeCount = cameras.filter((c) => c.is_active).length;
+  // Las imágenes se procesan una sola vez (sin loop de inferencia continuo)
+  // y no cuentan para el límite de fuentes activas.
+  const activeCount = cameras.filter((c) => c.is_active && c.source_type !== "image").length;
+  const activeImageCount = cameras.filter((c) => c.is_active && c.source_type === "image").length;
 
   const load = () => camerasApi.list().then((r) => setCameras(r.data));
   useEffect(() => { load(); }, []);
@@ -157,8 +170,8 @@ export default function CamerasPage() {
   const handleSave = async () => {
     setError("");
     if (!form.name.trim()) { setError("El nombre es requerido"); return; }
-    if (form.is_active && !modal.editing?.is_active && activeCount >= MAX_ACTIVE) {
-      setError(`Límite de ${MAX_ACTIVE} fuentes activas alcanzado`);
+    if (form.is_active && form.source_type !== "image" && !modal.editing?.is_active && activeCount >= MAX_ACTIVE) {
+      setError(`Límite de ${MAX_ACTIVE} fuentes RTSP/video activas alcanzado`);
       return;
     }
     try {
@@ -182,8 +195,8 @@ export default function CamerasPage() {
   };
 
   const handleToggleActive = async (cam: Camera) => {
-    if (!cam.is_active && activeCount >= MAX_ACTIVE) {
-      alert(`Límite de ${MAX_ACTIVE} fuentes activas alcanzado`);
+    if (!cam.is_active && cam.source_type !== "image" && activeCount >= MAX_ACTIVE) {
+      alert(`Límite de ${MAX_ACTIVE} fuentes RTSP/video activas alcanzado`);
       return;
     }
     await camerasApi.update(cam.id, { is_active: !cam.is_active });
@@ -232,7 +245,10 @@ export default function CamerasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Configuración de Cámaras</h1>
-          <p className="text-sm text-gray-500 mt-0.5 font-mono">{activeCount}/{MAX_ACTIVE} fuentes activas</p>
+          <p className="text-sm text-gray-500 mt-0.5 font-mono">
+            {activeCount}/{MAX_ACTIVE} RTSP/video activas
+            {activeImageCount > 0 && ` · ${activeImageCount} imagen${activeImageCount === 1 ? "" : "es"} activa${activeImageCount === 1 ? "" : "s"} (sin límite)`}
+          </p>
         </div>
         <button onClick={openCreate} className="btn-primary flex items-center gap-2">
           <Plus size={16} /> Agregar Fuente

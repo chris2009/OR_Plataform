@@ -1,10 +1,13 @@
 import asyncio
+import base64
 import logging
 
+import cv2
 import redis.asyncio as aioredis
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.config import settings
+from app.services.detection.engine import detection_engine
 
 router = APIRouter(prefix="/ws", tags=["websockets"])
 logger = logging.getLogger(__name__)
@@ -31,6 +34,10 @@ async def _redis_to_ws(ws: WebSocket, channel: str):
 async def ws_camera_stream(websocket: WebSocket, camera_id: int):
     await websocket.accept()
     try:
+        latest_frame = await detection_engine.get_latest_frame(camera_id)
+        if latest_frame is not None:
+            _, buf = cv2.imencode(".jpg", latest_frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            await websocket.send_text(base64.b64encode(buf).decode())
         await _redis_to_ws(websocket, f"camera:{camera_id}:frames")
     except WebSocketDisconnect:
         logger.debug(f"[WS] Cliente desconectado del stream {camera_id}")

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { CheckCircle, Eye, Trash2, AlertCircle } from "lucide-react";
+import { CheckCircle, Trash2 } from "lucide-react";
 import { eventsApi, type Event, type EventStats } from "@/api";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";

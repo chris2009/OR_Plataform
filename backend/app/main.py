@@ -3,11 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
 import os
 
 from app.core.config import settings
 from app.api import auth, cameras, events, users, settings as settings_router, detection_profiles
 from app.api import ws_router
+from app.db.session import AsyncSessionLocal
+from app.models.camera import Camera
 from app.services.detection.engine import detection_engine
 
 
@@ -18,6 +21,15 @@ async def lifespan(app: FastAPI):
     os.makedirs(settings.UPLOADS_DIR, exist_ok=True)
     os.makedirs(settings.YOLO_MODEL_DIR, exist_ok=True)
     await detection_engine.initialize()
+
+    # Reanudar workers de cámaras que quedaron activas antes del reinicio
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Camera).where(Camera.is_active == True, Camera.detection_enabled == True)
+        )
+        for cam in result.scalars().all():
+            await detection_engine.start_camera(cam)
+
     yield
     # Shutdown
     await detection_engine.shutdown()

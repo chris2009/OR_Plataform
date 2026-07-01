@@ -83,15 +83,16 @@ async def event_stats(
     ).all()
     by_camera = {r.camera_name: r.cnt for r in by_camera_rows}
 
+    hour_expr = func.date_part("hour", Event.timestamp).label("hour")
     by_hour_rows = (
         await db.execute(
             select(
-                func.date_part("hour", Event.timestamp).label("hour"),
+                hour_expr,
                 func.count(Event.id).label("cnt"),
             )
             .where(Event.timestamp >= today_start)
-            .group_by(func.date_part("hour", Event.timestamp))
-            .order_by(func.date_part("hour", Event.timestamp))
+            .group_by(hour_expr)
+            .order_by(hour_expr)
         )
     ).all()
     by_hour = [{"hour": int(r.hour), "count": r.cnt} for r in by_hour_rows]
