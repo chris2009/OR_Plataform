@@ -74,6 +74,29 @@ Al arrancar, el sistema detecta el hardware disponible:
 
 El modelo puede cambiarse manualmente desde `/settings` (Admin) sin reiniciar el contenedor (`POST /api/settings/reload-engine`).
 
+### Aceleración por GPU (opcional)
+
+Por defecto, Docker **no** le da acceso al contenedor a una GPU NVIDIA del host aunque exista — hay que habilitarlo explícitamente. El paquete `torch` ya instalado incluye soporte CUDA (`torch==2.3.0+cu121`), así que no hace falta cambiar nada del código: basta con pasarle el device al contenedor.
+
+```bash
+# En vez de "docker compose up", usar el override docker-compose.gpu.yml:
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
+```
+
+Requisitos en el host:
+- Drivers NVIDIA instalados
+- **Windows**: Docker Desktop con backend WSL2 (el soporte de GPU viene incluido, no requiere instalar nada extra)
+- **Linux**: [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+
+Verificar que el contenedor ve la GPU:
+```bash
+docker compose exec backend python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
+Si ya tenías el backend corriendo sin GPU, tras aplicar el override hace falta recargar el motor para que detecte el nuevo hardware y cambie a `yolov8m.pt`: botón "Recargar motor de detección" en `/settings`, o `POST /api/settings/reload-engine`.
+
+Sin este override, el proyecto sigue funcionando igual en cualquier máquina sin NVIDIA (CPU o GPU integrada) — es aditivo, no reemplaza el `docker-compose.yml` base.
+
 ## Requisitos Previos
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y corriendo (incluye Docker Compose v2)

@@ -1,0 +1,22 @@
+# Override opcional: habilita el acceso a la GPU NVIDIA dentro del contenedor backend.
+#
+# Uso (en vez de "docker compose up"):
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
+#
+# Requisitos en el host:
+#   - Drivers NVIDIA instalados
+#   - Windows: Docker Desktop con backend WSL2 (el soporte de GPU viene incluido,
+#     no hace falta instalar nada más)
+#   - Linux: NVIDIA Container Toolkit (nvidia-container-toolkit)
+#
+# Sin este archivo, el proyecto sigue funcionando igual en cualquier máquina sin
+# GPU NVIDIA (CPU o GPU integrada) — este override es aditivo, no reemplaza nada.
+services:
+  backend:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
