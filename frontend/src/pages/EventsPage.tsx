@@ -1,10 +1,15 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { format } from "date-fns";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { CheckCircle, Trash2, Layers, Tag, Camera as CameraIcon, Clock, type LucideIcon } from "lucide-react";
+import { CheckCircle, Trash2, Layers, Tag, Camera as CameraIcon, Clock, FileText, FileSpreadsheet, type LucideIcon } from "lucide-react";
+import jsPDF from "jspdf";
+import { autoTable } from "jspdf-autotable";
+import * as XLSX from "xlsx";
+import html2canvas from "html2canvas";
 import { eventsApi, camerasApi, type Event, type EventStats, type Camera, type GroupedCount } from "@/api";
 import { useAuthStore } from "@/store/authStore";
 import { cn, colorForClass } from "@/lib/utils";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 const OTHER_COLOR = "#6B7280";
 
@@ -60,7 +65,10 @@ export default function EventsPage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Event | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Event | null>(null);
   const [groupBy, setGroupBy] = useState<"day" | "source">("day");
+  const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
   const [filters, setFilters] = useState({
     acknowledged: "" as "" | "true" | "false",
     camera_id: "",
@@ -94,10 +102,12 @@ export default function EventsPage() {
     if (selected?.id === id) setSelected((s) => s && { ...s, acknowledged: true });
   };
 
-  const handleDelete = async (id: number) => {
-    await eventsApi.delete(id);
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    await eventsApi.delete(deleteTarget.id);
     load();
-    if (selected?.id === id) setSelected(null);
+    if (selected?.id === deleteTarget.id) setSelected(null);
+    setDeleteTarget(null);
   };
 
   const topClass = stats ? Object.entries(stats.by_class).sort((a, b) => b[1] - a[1])[0]?.[0] : undefined;
@@ -122,9 +132,102 @@ export default function EventsPage() {
   const hasOtras = chartData.some((d) => "otras" in d);
   const seriesKeys = hasOtras ? [...topClasses, "otras"] : topClasses;
 
+  const handleExportPDF = async () => {
+    setExporting("pdf");
+    try {
+      const doc = new jsPDF({ orientation: "landscape" });
+      doc.setFontSize(16);
+      doc.text("Reporte de Eventos de Detección — YOLO Surveillance", 14, 15);
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(`Generado: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 14, 21);
+
+      let nextY = 28;
+      if (chartRef.current) {
+        const canvas = await html2canvas(chartRef.current, { backgroundColor: "#0A0E17", scale: 2 });
+        const imgData = canvas.toDataURL("image/png");
+        const imgWidth = 265;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        doc.addImage(imgData, "PNG", 14, nextY, imgWidth, imgHeight);
+        nextY += imgHeight + 8;
+      }
+
+      autoTable(doc, {
+        startY: nextY,
+        head: [["Timestamp", "Cámara", "Clase", "Confianza", "Estado"]],
+        body: events.map((ev) => [
+          format(new Date(ev.timestamp), "dd/MM/yyyy HH:mm:ss"),
+          ev.camera_name,
+          ev.detected_class,
+          `${(ev.confidence * 100).toFixed(0)}%`,
+          ev.acknowledged ? "Reconocido" : "Pendiente",
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [37, 99, 235] },
+        margin: { left: 14, right: 14 },
+      });
+
+      doc.save(`eventos_${format(new Date(), "yyyyMMdd_HHmm")}.pdf`);
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportExcel = () => {
+    setExporting("excel");
+    try {
+      const wb = XLSX.utils.book_new();
+
+      const eventsSheet = XLSX.utils.json_to_sheet(
+        events.map((ev) => ({
+          Timestamp: format(new Date(ev.timestamp), "dd/MM/yyyy HH:mm:ss"),
+          Cámara: ev.camera_name,
+          Clase: ev.detected_class,
+          "Confianza (%)": Math.round(ev.confidence * 100),
+          Estado: ev.acknowledged ? "Reconocido" : "Pendiente",
+          "ROI activo": ev.roi_active ? "Sí" : "No",
+        }))
+      );
+      XLSX.utils.book_append_sheet(wb, eventsSheet, "Eventos");
+
+      const chartSheetData = chartData.map((row) => {
+        const out: Record<string, string | number> = { Grupo: row.group };
+        seriesKeys.forEach((k) => { out[k] = (row[k] as number) ?? 0; });
+        return out;
+      });
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet(chartSheetData),
+        groupBy === "day" ? "Detecciones por día" : "Detecciones por fuente"
+      );
+
+      XLSX.writeFile(wb, `eventos_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
+    } finally {
+      setExporting(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Eventos de Detección</h1>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-xl font-semibold">Eventos de Detección</h1>
+        <div className="flex gap-2">
+          <button
+            onClick={handleExportPDF}
+            disabled={exporting !== null || events.length === 0}
+            className="btn-ghost flex items-center gap-2 text-sm border border-danger/30 text-danger hover:bg-danger/10 disabled:opacity-40"
+          >
+            <FileText size={15} /> {exporting === "pdf" ? "Exportando..." : "Exportar PDF"}
+          </button>
+          <button
+            onClick={handleExportExcel}
+            disabled={exporting !== null || events.length === 0}
+            className="btn-ghost flex items-center gap-2 text-sm border border-success/30 text-success hover:bg-success/10 disabled:opacity-40"
+          >
+            <FileSpreadsheet size={15} /> {exporting === "excel" ? "Exportando..." : "Exportar Excel"}
+          </button>
+        </div>
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -140,7 +243,7 @@ export default function EventsPage() {
       </div>
 
       {/* Gráfica agrupada por día/fuente, coloreada por clase */}
-      <div className="card-glass p-4">
+      <div ref={chartRef} className="card-glass p-4">
         <div className="flex items-center justify-between mb-3">
           <p className="text-sm text-gray-400">
             Detecciones {groupBy === "day" ? "por día" : "por fuente"} (últimos 7 días)
@@ -299,7 +402,7 @@ export default function EventsPage() {
                     )}
                     {user?.role === "admin" && (
                       <button
-                        onClick={() => handleDelete(ev.id)}
+                        onClick={() => setDeleteTarget(ev)}
                         className="text-gray-400 hover:text-danger transition-colors"
                         title="Eliminar"
                       >
@@ -382,6 +485,14 @@ export default function EventsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Eliminar evento"
+        message="¿Eliminar este evento y su snapshot? Esta acción no se puede deshacer."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

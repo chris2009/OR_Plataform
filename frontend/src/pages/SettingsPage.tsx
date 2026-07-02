@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Plus, Trash2, CheckCheck } from "lucide-react";
+import { RefreshCw, Plus, Trash2, CheckCheck, Cpu, SlidersHorizontal, Monitor, Zap } from "lucide-react";
 import { settingsApi, profilesApi, type SystemConfig, type SystemInfo, type DetectionProfile } from "@/api";
 import { cn } from "@/lib/utils";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 const YOLO_MODELS = [
-  { value: "yolov8n.pt", label: "YOLOv8n — Nano", desc: "Máxima velocidad, menor precisión" },
-  { value: "yolov8s.pt", label: "YOLOv8s — Small", desc: "Velocidad aceptable en CPU" },
-  { value: "yolov8m.pt", label: "YOLOv8m — Medium", desc: "Balance precisión/velocidad (GPU)" },
-  { value: "yolov8l.pt", label: "YOLOv8l — Large", desc: "Alta precisión, requiere más recursos" },
+  { value: "yolov8n.pt", label: "YOLOv8n — Nano", desc: "Máxima velocidad, menor precisión", color: "#10B981" },
+  { value: "yolov8s.pt", label: "YOLOv8s — Small", desc: "Velocidad aceptable en CPU", color: "#2563EB" },
+  { value: "yolov8m.pt", label: "YOLOv8m — Medium", desc: "Balance precisión/velocidad (GPU)", color: "#8B5CF6" },
+  { value: "yolov8l.pt", label: "YOLOv8l — Large", desc: "Alta precisión, requiere más recursos", color: "#EF4444" },
 ];
 
 function formatUptime(seconds: number): string {
@@ -25,6 +26,7 @@ export default function SettingsPage() {
   const [reloading, setReloading] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
   const [toast, setToast] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<DetectionProfile | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -75,40 +77,46 @@ export default function SettingsPage() {
     showToast("Perfil aplicado a todas las cámaras activas");
   };
 
-  const handleDeleteProfile = async (id: number) => {
-    if (!confirm("¿Eliminar perfil?")) return;
-    await profilesApi.delete(id);
+  const confirmDeleteProfile = async () => {
+    if (!deleteTarget) return;
+    await profilesApi.delete(deleteTarget.id);
+    setDeleteTarget(null);
     load();
   };
 
   if (!config) return <div className="text-gray-500 text-sm">Cargando...</div>;
 
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="space-y-8 max-w-3xl mx-auto">
       <h1 className="text-xl font-semibold">Configuración del Sistema</h1>
 
       {/* Modelo YOLO */}
-      <section className="card-glass p-6 space-y-4">
-        <h2 className="font-medium text-gray-200">Modelo YOLO</h2>
+      <section className="card-glass p-6 space-y-4 border-t-2 border-t-accent">
+        <h2 className="font-medium text-gray-200 flex items-center gap-2">
+          <Cpu size={16} className="text-accent" /> Modelo YOLO
+        </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {YOLO_MODELS.map(({ value, label, desc }) => (
-            <button
-              key={value}
-              onClick={() => setConfig((c) => c && { ...c, yolo_model: value })}
-              className={cn(
-                "text-left p-3 rounded-lg border transition-all",
-                config.yolo_model === value || (config.yolo_model === "auto" && value === info?.model_name)
-                  ? "border-accent bg-accent/10 text-white"
-                  : "border-white/10 hover:border-white/20 text-gray-400"
-              )}
-            >
-              <p className="font-medium text-sm">{label}</p>
-              <p className="text-xs mt-0.5 opacity-70">{desc}</p>
-              {config.yolo_model === "auto" && value === info?.model_name && (
-                <span className="text-xs bg-warning/20 text-warning px-1.5 py-0.5 rounded mt-1 inline-block">Auto</span>
-              )}
-            </button>
-          ))}
+          {YOLO_MODELS.map(({ value, label, desc, color }) => {
+            const isSelected = config.yolo_model === value || (config.yolo_model === "auto" && value === info?.model_name);
+            return (
+              <button
+                key={value}
+                onClick={() => setConfig((c) => c && { ...c, yolo_model: value })}
+                className={cn(
+                  "text-left p-3 rounded-lg border transition-all relative overflow-hidden",
+                  isSelected ? "bg-white/5 text-white" : "border-white/10 hover:border-white/20 text-gray-400"
+                )}
+                style={{ borderColor: isSelected ? color : undefined }}
+              >
+                <div className="absolute top-0 left-0 w-full h-0.5" style={{ backgroundColor: color }} />
+                <p className="font-medium text-sm">{label}</p>
+                <p className="text-xs mt-0.5 opacity-70">{desc}</p>
+                {config.yolo_model === "auto" && value === info?.model_name && (
+                  <span className="text-xs bg-warning/20 text-warning px-1.5 py-0.5 rounded mt-1 inline-block">Auto</span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -152,8 +160,10 @@ export default function SettingsPage() {
       </section>
 
       {/* Perfiles de detección */}
-      <section className="card-glass p-6 space-y-4">
-        <h2 className="font-medium text-gray-200">Perfiles de Detección</h2>
+      <section className="card-glass p-6 space-y-4 border-t-2 border-t-success">
+        <h2 className="font-medium text-gray-200 flex items-center gap-2">
+          <SlidersHorizontal size={16} className="text-success" /> Perfiles de Detección
+        </h2>
         <div className="flex gap-2">
           <input
             type="text"
@@ -169,7 +179,7 @@ export default function SettingsPage() {
         </div>
         <div className="space-y-2">
           {profiles.map((p) => (
-            <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
+            <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-l-[3px] border-white/5 border-l-success/60 hover:border-white/10 transition-colors">
               <div>
                 <p className="text-sm font-medium">{p.name}</p>
                 <p className="text-xs text-gray-500 font-mono">
@@ -185,7 +195,7 @@ export default function SettingsPage() {
                   <CheckCheck size={15} />
                 </button>
                 <button
-                  onClick={() => handleDeleteProfile(p.id)}
+                  onClick={() => setDeleteTarget(p)}
                   className="text-gray-400 hover:text-danger transition-colors"
                 >
                   <Trash2 size={15} />
@@ -198,21 +208,29 @@ export default function SettingsPage() {
 
       {/* Info del sistema */}
       {info && (
-        <section className="card-glass p-6 space-y-3">
-          <h2 className="font-medium text-gray-200">Información del Sistema</h2>
+        <section className="card-glass p-6 space-y-3 border-t-2 border-t-warning">
+          <h2 className="font-medium text-gray-200 flex items-center gap-2">
+            <Monitor size={16} className="text-warning" /> Información del Sistema
+          </h2>
           <div className="grid grid-cols-2 gap-3 text-sm font-mono">
             {[
-              { label: "Modelo activo", value: info.model_name },
-              { label: "Ultralytics", value: info.ultralytics_version },
-              { label: "GPU", value: info.gpu || "No disponible" },
-              { label: "RAM total", value: info.ram_total_gb ? `${info.ram_total_gb} GB` : "—" },
-              { label: "RAM disponible", value: info.ram_available_gb ? `${info.ram_available_gb} GB` : "—" },
-              { label: "Uptime", value: formatUptime(info.uptime_seconds) },
-              { label: "Cámaras activas", value: info.active_cameras.join(", ") || "Ninguna" },
-            ].map(({ label, value }) => (
+              { label: "Modelo activo", value: info.model_name, color: undefined },
+              { label: "Ultralytics", value: info.ultralytics_version, color: undefined },
+              {
+                label: "GPU",
+                value: info.gpu ? (
+                  <span className="inline-flex items-center gap-1 text-success"><Zap size={11} />{info.gpu}</span>
+                ) : "No disponible",
+                color: info.gpu ? "text-success" : "text-gray-500",
+              },
+              { label: "RAM total", value: info.ram_total_gb ? `${info.ram_total_gb} GB` : "—", color: undefined },
+              { label: "RAM disponible", value: info.ram_available_gb ? `${info.ram_available_gb} GB` : "—", color: undefined },
+              { label: "Uptime", value: formatUptime(info.uptime_seconds), color: "text-accent" },
+              { label: "Cámaras activas", value: info.active_cameras.join(", ") || "Ninguna", color: info.active_cameras.length > 0 ? "text-success" : undefined },
+            ].map(({ label, value, color }) => (
               <div key={label} className="space-y-0.5">
                 <p className="text-gray-500 text-xs">{label}</p>
-                <p className="text-white text-xs">{value}</p>
+                <p className={cn("text-xs", color ?? "text-white")}>{value}</p>
               </div>
             ))}
           </div>
@@ -225,6 +243,14 @@ export default function SettingsPage() {
           {toast}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Eliminar perfil"
+        message={`¿Eliminar el perfil "${deleteTarget?.name}"? Esta acción no se puede deshacer.`}
+        onConfirm={confirmDeleteProfile}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

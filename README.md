@@ -4,15 +4,19 @@ Plataforma web de videovigilancia inteligente con detección de objetos en tiemp
 
 ## Características
 
-- Detección de objetos en tiempo real con YOLOv8 (selección automática del modelo según hardware)
+- Detección de objetos en tiempo real con YOLOv8 (selección automática del modelo según hardware, con soporte opcional de GPU NVIDIA)
 - Soporte de múltiples fuentes: cámaras IP vía RTSP, videos subidos, imágenes subidas
 - Hasta 2 fuentes RTSP/video activas simultáneas (consumen inferencia continua); fuentes tipo imagen **sin límite** — se procesan una sola vez y se muestran en un mosaico dinámico en Live
+- Bounding boxes con **color distinto por clase detectada** (mismo esquema de color en backend y frontend)
+- Pausa automática de la inferencia de fuentes tipo video cuando nadie está viendo `/live` (ahorra CPU/GPU y evita eventos duplicados en cada vuelta del loop)
 - Zonas ROI (Region of Interest) configurables por cámara
 - Captura y almacenamiento de eventos con snapshots
-- Clasificación configurable: 80 clases COCO con perfiles predefinidos
+- Exportación de eventos a **PDF** (incluye gráfico) y **Excel** desde `/events`
+- Clasificación configurable: 80 clases COCO con perfiles predefinidos y opción "Seleccionar todas"
 - Gestión de usuarios con roles (Admin, Operator, Viewer)
 - Dashboard en tiempo real vía WebSockets
-- Tema Dark/Light persistido por usuario
+- Modales de confirmación para acciones destructivas (eliminar cámaras, usuarios, perfiles, eventos)
+- Tema Dark/Light persistido por usuario, con paleta de color diferenciada por sección
 
 ## Arquitectura
 
@@ -223,6 +227,8 @@ Definidas en `.env` (nunca se commitea; ver `.env.example` como plantilla).
 - Ir a `/events`
 - Filtrar por cámara, clase, fecha, estado
 - Click en evento para ver snapshot completo y reconocer
+- Gráfico de barras agrupado por día o por fuente, con color por clase detectada
+- Botones **Exportar PDF** / **Exportar Excel**: generan un archivo con el gráfico actual y la tabla de eventos filtrada
 
 ### 4. Gestionar Usuarios (Admin)
 - Ir a `/users`

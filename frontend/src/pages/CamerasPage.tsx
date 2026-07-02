@@ -4,6 +4,7 @@ import { Plus, Edit2, Trash2, Power, Upload, Check, X as XIcon } from "lucide-re
 import { camerasApi, type Camera, type SourceType } from "@/api";
 import { COCO_CLASSES } from "@/lib/cocoClasses";
 import { cn } from "@/lib/utils";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 const MAX_ACTIVE = 2;
 
@@ -112,6 +113,12 @@ function ClassMultiSelect({
   );
 }
 
+const SOURCE_BORDER_COLOR: Record<SourceType, string> = {
+  rtsp: "#2563EB",
+  video: "#F59E0B",
+  image: "#10B981",
+};
+
 function SourceTypeBadge({ type }: { type: SourceType }) {
   const colors: Record<SourceType, string> = {
     rtsp: "bg-accent/20 text-accent",
@@ -132,6 +139,7 @@ export default function CamerasPage() {
   const [error, setError] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Camera | null>(null);
 
   // Las imágenes se procesan una sola vez (sin loop de inferencia continuo)
   // y no cuentan para el límite de fuentes activas.
@@ -188,9 +196,10 @@ export default function CamerasPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("¿Eliminar cámara?")) return;
-    await camerasApi.delete(id);
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    await camerasApi.delete(deleteTarget.id);
+    setDeleteTarget(null);
     load();
   };
 
@@ -245,10 +254,21 @@ export default function CamerasPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">Configuración de Cámaras</h1>
-          <p className="text-sm text-gray-500 mt-0.5 font-mono">
-            {activeCount}/{MAX_ACTIVE} RTSP/video activas
-            {activeImageCount > 0 && ` · ${activeImageCount} imagen${activeImageCount === 1 ? "" : "es"} activa${activeImageCount === 1 ? "" : "s"} (sin límite)`}
-          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-1.5">
+            <span className={cn(
+              "inline-flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 rounded",
+              activeCount >= MAX_ACTIVE ? "bg-warning/20 text-warning" : "bg-accent/20 text-accent"
+            )}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              {activeCount}/{MAX_ACTIVE} RTSP/video activas
+            </span>
+            {activeImageCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 rounded bg-success/20 text-success">
+                <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                {activeImageCount} imagen{activeImageCount === 1 ? "" : "es"} activa{activeImageCount === 1 ? "" : "s"} (sin límite)
+              </span>
+            )}
+          </div>
         </div>
         <button onClick={openCreate} className="btn-primary flex items-center gap-2">
           <Plus size={16} /> Agregar Fuente
@@ -264,7 +284,11 @@ export default function CamerasPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {cameras.map((cam) => (
-            <div key={cam.id} className="card-glass p-4 space-y-3">
+            <div
+              key={cam.id}
+              className="card-glass p-4 space-y-3 border-l-[3px]"
+              style={{ borderLeftColor: SOURCE_BORDER_COLOR[cam.source_type] }}
+            >
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-medium">{cam.name}</h3>
@@ -273,7 +297,7 @@ export default function CamerasPage() {
                     {cam.roi && <span className="text-xs bg-warning/20 text-warning px-1.5 py-0.5 rounded">ROI</span>}
                   </div>
                 </div>
-                <div className={cn("w-2.5 h-2.5 rounded-full mt-1", cam.is_active ? "bg-success" : "bg-gray-600")} />
+                <div className={cn("w-2.5 h-2.5 rounded-full mt-1", cam.is_active ? "bg-success animate-pulse-slow" : "bg-gray-600")} />
               </div>
 
               {cam.ip_address && (
@@ -300,7 +324,7 @@ export default function CamerasPage() {
                 <button onClick={() => openEdit(cam)} className="btn-ghost p-1.5 text-gray-400">
                   <Edit2 size={14} />
                 </button>
-                <button onClick={() => handleDelete(cam.id)} className="btn-ghost p-1.5 text-gray-400 hover:text-danger">
+                <button onClick={() => setDeleteTarget(cam)} className="btn-ghost p-1.5 text-gray-400 hover:text-danger">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -459,6 +483,14 @@ export default function CamerasPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Eliminar fuente"
+        message={`¿Eliminar "${deleteTarget?.name}"? Esta acción también borra sus eventos registrados y no se puede deshacer.`}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

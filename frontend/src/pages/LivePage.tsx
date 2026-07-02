@@ -108,7 +108,10 @@ export default function LivePage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Vista en Vivo</h1>
-        <span className="text-sm text-gray-500 font-mono">{activeCameras.length} fuente{activeCameras.length === 1 ? "" : "s"} activa{activeCameras.length === 1 ? "" : "s"}</span>
+        <span className="inline-flex items-center gap-1.5 text-sm font-mono px-2.5 py-1 rounded bg-success/20 text-success">
+          <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse-slow" />
+          {activeCameras.length} fuente{activeCameras.length === 1 ? "" : "s"} activa{activeCameras.length === 1 ? "" : "s"}
+        </span>
       </div>
 
       <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>

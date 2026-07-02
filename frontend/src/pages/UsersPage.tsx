@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Plus, Edit2, Trash2 } from "lucide-react";
+import { Plus, Edit2, Trash2, ShieldCheck, UserCog, Eye } from "lucide-react";
 import { usersApi, type User } from "@/api";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 const ROLES = ["admin", "operator", "viewer"] as const;
 type Role = typeof ROLES[number];
@@ -11,7 +12,19 @@ type Role = typeof ROLES[number];
 const roleBadge: Record<Role, string> = {
   admin: "bg-danger/20 text-danger",
   operator: "bg-accent/20 text-accent",
-  viewer: "bg-gray-700 text-gray-300",
+  viewer: "bg-purple-500/20 text-purple-400",
+};
+
+const roleIcon: Record<Role, typeof ShieldCheck> = {
+  admin: ShieldCheck,
+  operator: UserCog,
+  viewer: Eye,
+};
+
+const roleAvatarColor: Record<Role, string> = {
+  admin: "bg-danger/20 text-danger",
+  operator: "bg-accent/20 text-accent",
+  viewer: "bg-purple-500/20 text-purple-400",
 };
 
 interface UserForm {
@@ -41,6 +54,7 @@ export default function UsersPage() {
   });
   const [form, setForm] = useState<UserForm>(emptyForm());
   const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
   const load = () => usersApi.list().then((r) => setUsers(r.data));
   useEffect(() => { load(); }, []);
@@ -76,10 +90,10 @@ export default function UsersPage() {
     }
   };
 
-  const handleDelete = async (u: User) => {
-    if (u.id === currentUser?.id) return;
-    if (!confirm(`¿Eliminar usuario "${u.username}"?`)) return;
-    await usersApi.delete(u.id);
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    await usersApi.delete(deleteTarget.id);
+    setDeleteTarget(null);
     load();
   };
 
@@ -108,19 +122,29 @@ export default function UsersPage() {
             {users.map((u) => (
               <tr key={u.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
                 <td className="px-4 py-3">
-                  <div>
-                    <p className="font-medium">{u.username}</p>
-                    <p className="text-xs text-gray-500">{u.full_name}</p>
+                  <div className="flex items-center gap-3">
+                    <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0", roleAvatarColor[u.role])}>
+                      {(u.full_name || u.username)[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-medium">{u.username}</p>
+                      <p className="text-xs text-gray-500">{u.full_name}</p>
+                    </div>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-gray-400">{u.email}</td>
                 <td className="px-4 py-3">
-                  <span className={cn("px-2 py-0.5 rounded text-xs capitalize", roleBadge[u.role])}>
+                  <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs capitalize", roleBadge[u.role])}>
+                    {(() => { const RoleIcon = roleIcon[u.role]; return <RoleIcon size={11} />; })()}
                     {u.role}
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={cn("text-xs", u.is_active ? "text-success" : "text-gray-500")}>
+                  <span className={cn(
+                    "inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded",
+                    u.is_active ? "bg-success/20 text-success" : "bg-white/5 text-gray-500"
+                  )}>
+                    <span className={cn("w-1.5 h-1.5 rounded-full", u.is_active ? "bg-success" : "bg-gray-500")} />
                     {u.is_active ? "Activo" : "Inactivo"}
                   </span>
                 </td>
@@ -137,7 +161,7 @@ export default function UsersPage() {
                     </button>
                     {u.id !== currentUser?.id && (
                       <button
-                        onClick={() => handleDelete(u)}
+                        onClick={() => setDeleteTarget(u)}
                         className="text-gray-400 hover:text-danger transition-colors"
                       >
                         <Trash2 size={15} />
@@ -206,6 +230,14 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Eliminar usuario"
+        message={`¿Eliminar al usuario "${deleteTarget?.username}"? Esta acción no se puede deshacer.`}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
