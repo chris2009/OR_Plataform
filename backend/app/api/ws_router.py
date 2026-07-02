@@ -12,6 +12,26 @@ from app.services.detection.engine import detection_engine
 router = APIRouter(prefix="/ws", tags=["websockets"])
 logger = logging.getLogger(__name__)
 
+# Cuenta de clientes viendo el stream en vivo de cada cámara, para pausar
+# la inferencia de fuentes tipo "video" cuando nadie está mirando.
+_stream_subscribers: dict[int, int] = {}
+
+
+def _on_stream_subscribe(camera_id: int):
+    _stream_subscribers[camera_id] = _stream_subscribers.get(camera_id, 0) + 1
+    worker = detection_engine.get_worker(camera_id)
+    if worker and worker.camera.source_type == "video":
+        worker.resume()
+
+
+def _on_stream_unsubscribe(camera_id: int):
+    remaining = max(0, _stream_subscribers.get(camera_id, 1) - 1)
+    _stream_subscribers[camera_id] = remaining
+    if remaining == 0:
+        worker = detection_engine.get_worker(camera_id)
+        if worker and worker.camera.source_type == "video":
+            worker.pause()
+
 
 async def _redis_to_ws(ws: WebSocket, channel: str):
     """Consume un canal Redis pub/sub y reenvía mensajes al WebSocket."""
@@ -33,6 +53,7 @@ async def _redis_to_ws(ws: WebSocket, channel: str):
 @router.websocket("/camera/{camera_id}/stream")
 async def ws_camera_stream(websocket: WebSocket, camera_id: int):
     await websocket.accept()
+    _on_stream_subscribe(camera_id)
     try:
         latest_frame = await detection_engine.get_latest_frame(camera_id)
         if latest_frame is not None:
@@ -43,6 +64,8 @@ async def ws_camera_stream(websocket: WebSocket, camera_id: int):
         logger.debug(f"[WS] Cliente desconectado del stream {camera_id}")
     except Exception as e:
         logger.error(f"[WS] Error en stream {camera_id}: {e}")
+    finally:
+        _on_stream_unsubscribe(camera_id)
 
 
 @router.websocket("/camera/{camera_id}/events")

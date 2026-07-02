@@ -26,5 +26,20 @@ export function useWebSocket(path: string, onMessage: (data: string) => void) {
     };
   }, [connect]);
 
+  // Pausar el stream cuando la pestaña no está visible (ahorra ancho de
+  // banda/batería en cliente) y reanudar al volver. El backend detecta la
+  // desconexión y, para fuentes tipo video, pausa también la inferencia.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        wsRef.current?.close();
+      } else if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+        connect();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [connect]);
+
   return { status };
 }

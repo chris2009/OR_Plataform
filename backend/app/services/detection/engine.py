@@ -90,6 +90,22 @@ class DetectionEngine:
     async def get_latest_frame(self, camera_id: int) -> Optional[np.ndarray]:
         return self._latest_frames.get(camera_id)
 
+    def get_worker(self, camera_id: int) -> Optional[StreamWorker]:
+        return self._workers.get(camera_id)
+
+    def pause_camera(self, camera_id: int):
+        """Pausa la lectura/inferencia de un worker (pensado solo para
+        fuentes tipo video: deja de gastar CPU/GPU en loops que nadie mira,
+        sin cerrar el archivo)."""
+        worker = self._workers.get(camera_id)
+        if worker:
+            worker.pause()
+
+    def resume_camera(self, camera_id: int):
+        worker = self._workers.get(camera_id)
+        if worker:
+            worker.resume()
+
     def get_model_info(self) -> dict:
         try:
             import torch

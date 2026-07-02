@@ -39,10 +39,26 @@ class StreamWorker:
         self.camera = camera
         self.engine = engine
         self._stop_event = asyncio.Event()
+        self._paused_event = asyncio.Event()
         self._frame_count = 0
+        # Solo relevante para source_type == "video": tras la primera pasada
+        # completa no se vuelven a guardar eventos en las vueltas del loop
+        # (mismo contenido, evita duplicar eventos indefinidamente).
+        self._video_completed_pass = False
 
     def stop(self):
         self._stop_event.set()
+
+    def pause(self):
+        """Detiene la lectura/inferencia sin cerrar el stream (solo video)."""
+        self._paused_event.set()
+
+    def resume(self):
+        self._paused_event.clear()
+
+    @property
+    def is_paused(self) -> bool:
+        return self._paused_event.is_set()
 
     async def run(self):
         camera = self.camera
@@ -98,8 +114,16 @@ class StreamWorker:
         loop = asyncio.get_event_loop()
 
         while not self._stop_event.is_set():
+            if self._paused_event.is_set():
+                # Nadie está viendo este video: no leer/inferir, pero mantener
+                # el cap abierto para reanudar exactamente donde quedó.
+                await asyncio.sleep(0.5)
+                continue
+
             ret, frame = await loop.run_in_executor(None, cap.read)
             if not ret:
+                if camera.source_type == "video":
+                    self._video_completed_pass = True
                 break
 
             frame_idx += 1
@@ -116,8 +140,13 @@ class StreamWorker:
 
             new_detections = [d for d in detections if d not in last_detections]
             if new_detections:
-                await self._save_and_publish_events(new_detections, annotated, camera)
                 last_detections = detections
+                # Tras la primera pasada de un video, las vueltas del loop
+                # siguen mostrándose en vivo pero ya no generan eventos
+                # duplicados del mismo contenido.
+                skip_events = camera.source_type == "video" and self._video_completed_pass
+                if not skip_events:
+                    await self._save_and_publish_events(new_detections, annotated, camera)
 
             await asyncio.sleep(0)
 
