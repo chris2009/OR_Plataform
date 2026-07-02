@@ -55,7 +55,7 @@ export default function Layout() {
           {!collapsed && (
             <div className="flex items-center gap-3 min-w-0">
               <Shield className="text-accent shrink-0" size={22} />
-              <span className="font-semibold text-sm tracking-wide truncate">YOLO Surveillance</span>
+              <span className="font-semibold text-sm tracking-wide truncate">Surveillance</span>
             </div>
           )}
           <button
@@ -124,10 +124,13 @@ export default function Layout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header
-          className="flex items-center justify-between px-6 py-3 border-b border-white/5"
+          className="relative flex items-center justify-between px-6 py-3 border-b border-white/5"
           style={{ background: "var(--surface)" }}
         >
           <div />
+          <span className="absolute left-1/2 -translate-x-1/2 font-semibold text-sm tracking-wide hidden sm:block">
+            YOLO Surveillance
+          </span>
           <div className="flex items-center gap-4">
             {/* Theme toggle */}
             <button
