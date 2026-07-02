@@ -51,6 +51,7 @@ Object_Recognition_Plataforma/
   - Solo CPU, RAM ≥ 16 GB → `yolov8s.pt`
   - Solo CPU, RAM < 16 GB → `yolov8n.pt`
 - El modelo arranca en CPU por defecto. Usar `torch.cuda.is_available()` + `psutil.virtual_memory()`.
+- Docker no da acceso a la GPU del host por defecto. Para habilitar CUDA dentro del contenedor hay que levantar con el override `docker-compose.gpu.yml` (aditivo, no rompe el setup sin GPU): `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d`. El `torch` instalado ya incluye soporte CUDA (`+cu121`); no requiere cambios de código, solo el passthrough del device.
 - **Máximo 2 fuentes RTSP/video activas simultáneas** (validar en backend; loop de inferencia continuo). Las fuentes tipo **imagen** no cuentan para este límite: se procesan una sola vez (sin loop continuo) y pueden estar activas sin restricción.
 - Contraseñas de cámaras cifradas con **Fernet** en BD. Nunca exponerlas en responses API.
 - ROI siempre en **coordenadas relativas (0.0–1.0)**.
@@ -130,7 +131,9 @@ WS     /ws/events
 ## Levantar el Proyecto
 ```bash
 cp .env.example .env
-docker-compose up --build
+# Generar SECRET_KEY y FERNET_KEY reales antes de continuar (ver README)
+docker compose up --build -d
+# Con GPU NVIDIA: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
 # Frontend: http://localhost
 # API docs: http://localhost/api/docs
 ```
